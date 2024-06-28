@@ -48,37 +48,69 @@ model = AzureChatOpenAI(
 
 def invoke_azure_ai_search(query, top_n_searches):
     results = search_client.search(search_text=query, top=top_n_searches)
-    results = results
-    file_paths = [result["filepath"] for result in results]
 
-    updated_file_paths = []
-    for file in file_paths:
-        file = file.replace("__alqb__", "/")
-        file = file[:-4]
+    source = ''
+    index = 1
+    for result in results:
+        content = f'File {index}.\n'
+        content += 'Content:\n'
+        content += f'{result["content"]}\n\n'
+        file = result["filepath"]
+        search_score = result["@search.score"]
+        updated_file = ''
+        if file.startswith("EngMS_"):
+            if file.find("Releases") != -1:
+                updated_file = "https://eng.ms/docs/products/azure-linux/downloads"
+            elif file.find("Overview") != -1:
+                updated_file = "https://eng.ms/docs/products/azure-linux/overview/overview"
+            elif file.find("Onboarding") != -1:
+                updated_file = "https://eng.ms/docs/products/azure-linux/onboarding/onboardingoverview"
+            elif file.find("ResourcesandHelp") != -1:
+                updated_file = "https://eng.ms/docs/products/azure-linux/resourcesandhelp/resourcesandhelp"
+            elif file.find("Features") != -1: 
+                updated_file = "https://eng.ms/docs/products/azure-linux/features/supportandservicing"
+            elif file.find("GettingStarted") != -1:
+                updated_file = "https://eng.ms/docs/products/azure-linux/gettingstarted/aks/overview"
+            else:
+                updated_file = "https://eng.ms/docs/products/azure-linux/overview/overview"
+        elif file.startswith("PMC_"):
+            updated_file = 'https://packages.microsoft.com/'
+        elif file.startswith("CVE"):
+            updated_file = 'https://cvedashboard.azurewebsites.net/#/packages'
+        else:   
+            file = file.replace("__alqb__", "/")
+            file = file[:-4]
+            if file.startswith("github_"):
+                file = file[7:]
+                updated_file = file
+            elif file.startswith("mslearn_"):
+                file = file[8:]
+                updated_file = file
+            elif file.startswith("GH_releases_"):
+                file = file[12:]
+                updated_file = file
+        content += 'Citation:\n'
+        content += f'{updated_file}\n'
+        content += f"Search Score: {search_score}\n\n\n"
+        index += 1
 
-        if file.startswith("github_"):
-            file = file[7:]
-            updated_file_paths.append(file)
-        elif file.startswith("mslearn_"):
-            file = file[8:]
-            updated_file_paths.append(file)
-        elif file.startswith("GH_releases_"):
-            file = file[12:]
-            updated_file_paths.append(file)
-
-    citations = set(updated_file_paths)
-    
-    contents = '\n\n\n'.join([result['content'] for result in results])
-    return contents, citations
+        source += content
+    return source
 
 def invoke_llm(query, source):
     messages = []
     messages.append(
         {
-            'role': 'system',
-            'content': f'''
-            'Answer the next query based on following 2 sources of information:
-            Source: {source}
+            "role": "system",
+            "content": f'''You are an AI assistant specializing in Azure Linux. Use the following search results from the Azure Search index to answer the user's question accurately and comprehensively. 
+                Please ensure to:
+
+                1. Extract and use relevant information from the provided search results to form your answer.
+                2. Clearly cite any information you reference, providing citations at the end of your response under the heading "Citations."
+                3. If multiple sources are used, ensure each citation is clearly numbered and corresponds to the referenced information in your answer.
+                4. Answer concisely and ensure the information is relevant to the user's query.
+
+                Here are the search results to use: {source}
             '''
         }
     )
@@ -90,15 +122,9 @@ def invoke_llm(query, source):
     return output.content
 
 def generate_response(query):
-    contents, citations = invoke_azure_ai_search(query, 5)
+    contents = invoke_azure_ai_search(query, 10)
     output = invoke_llm(query, contents)
-
-    response = output
-    if citations.__len__() > 0:
-        response += '\n\nCitations:\n'
-        for citation in citations:
-            response += citation + '\n'
-    return response
+    return output
 
 
 class MyBot(ActivityHandler):
