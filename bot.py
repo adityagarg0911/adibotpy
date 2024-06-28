@@ -106,9 +106,10 @@ def invoke_llm(query, source):
                 Please ensure to:
 
                 1. Extract and use relevant information from the provided search results to form your answer.
-                2. Clearly cite any information you reference, providing citations at the end of your response under the heading "Citations."
-                3. If multiple sources are used, ensure each citation is clearly numbered and corresponds to the referenced information in your answer.
-                4. Answer concisely and ensure the information is relevant to the user's query.
+                2. Only provide citation links at the end of your response under the heading "Citations" if they are HTTPS links.
+                3. Do not include any citations within the main body of your answer unless absolutely necessary.
+                4. If multiple sources are used, ensure each citation is clearly numbered and corresponds to the referenced information in your answer.
+                5. Answer concisely and ensure the information is relevant to the user's query.
 
                 Here are the search results to use: {source}
             '''
