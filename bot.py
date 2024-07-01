@@ -6,6 +6,7 @@ import os
 import openai
 import dotenv
 import json
+import copy
 
 # Imports needed for Azure AI Search
 from azure.search.documents import SearchClient
@@ -97,29 +98,39 @@ def invoke_azure_ai_search(query, top_n_searches):
         source += content
     return source
 
+messages_master = []
+
 def invoke_llm(query, source):
-    messages = []
-    messages.append(
-        {
-            "role": "system",
-            "content": f'''You are an AI assistant specializing in Azure Linux. Use the following search results from the Azure Search index to answer the user's question accurately and comprehensively. 
-                Please ensure to:
 
-                1. Extract and use relevant information from the provided search results to form your answer.
-                2. Only provide citation links at the end of your response under the heading "Citations" if they are HTTPS links.
-                3. Do not include any citations within the main body of your answer unless absolutely necessary.
-                4. If multiple sources are used, ensure each citation is clearly numbered and corresponds to the referenced information in your answer.
-                5. Answer concisely and ensure the information is relevant to the user's query.
+    messages = copy.deepcopy(messages_master)
+    message_system = {
+        "role": "system",
+        "content": f'''You are an AI assistant specializing in Azure Linux. Use the following search results from the Azure Search index to answer the user's question accurately and comprehensively. 
+            Please ensure to:
 
-                Here are the search results to use: {source}
-            '''
-        }
-    )
-    messages.append({
+            1. Extract and use relevant information from the provided search results to form your answer.
+            2. Only provide citation links at the end of your response under the heading "Citations" if they are HTTPS links.
+            3. Do not include any citations within the main body of your answer unless absolutely necessary.
+            4. If multiple sources are used, ensure each citation is clearly numbered and corresponds to the referenced information in your answer.
+            5. Answer concisely and ensure the information is relevant to the user's query.
+
+            Here are the search results to use: {source}
+        '''
+    }
+    
+    message_user = {
         'role': 'user',
         'content': query
-    })
+    }
+    messages.append(message_system)
+    messages.append(message_user)
     output = model.invoke(messages)
+    message_assistant = {
+        "role": "assistant",
+        "content": output.content
+    }
+    messages_master.append(message_user)
+    messages_master.append(message_assistant)
     return output.content
 
 def generate_response(query):
