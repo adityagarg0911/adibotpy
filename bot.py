@@ -7,6 +7,7 @@ import openai
 import dotenv
 import json
 import copy
+import datetime
 
 # Imports needed for Azure AI Search
 from azure.search.documents import SearchClient
@@ -92,13 +93,16 @@ def invoke_azure_ai_search(query, top_n_searches):
                 updated_file = file
         content += 'Citation:\n'
         content += f'{updated_file}\n'
-        content += f"Search Score: {search_score}\n\n\n"
+        content += f"Search Score: {search_score}\n"
+        content += f'Time Stamp: {datetime.datetime.now()}\n\n\n'
         index += 1
 
         source += content
     return source
 
 messages_master = []
+search_results_master = []
+timestamps_master = []
 
 def invoke_llm(query, source):
 
@@ -108,13 +112,14 @@ def invoke_llm(query, source):
         "content": f'''You are an AI assistant specializing in Azure Linux. Use the following search results from the Azure Search index to answer the user's question accurately and comprehensively. 
             Please ensure to:
 
-            1. Extract and use relevant information from the provided search results to form your answer.
+            1. Extract and use relevant information from the provided search results to form your answer, giving more priority to the latest search results.
             2. Only provide citation links at the end of your response under the heading "Citations" if they are HTTPS links.
             3. Do not include any citations within the main body of your answer unless absolutely necessary.
             4. If multiple sources are used, ensure each citation is clearly numbered and corresponds to the referenced information in your answer.
             5. Answer concisely and ensure the information is relevant to the user's query.
 
             Here are the search results to use: {source}
+            Note: The chat context includes the last hour's chat history and search results history, which are timestamped for reference.
         '''
     }
     
@@ -129,11 +134,29 @@ def invoke_llm(query, source):
         "role": "assistant",
         "content": output.content
     }
+
+    timestamps_master.append(datetime.datetime.now())
     messages_master.append(message_user)
     messages_master.append(message_assistant)
+    search_results_master.append(source)
+
     return output.content
 
 def generate_response(query):
+    del_idx = 0
+    curr_timestamp = datetime.datetime.now()
+    for ts in timestamps_master:
+        time_diff = curr_timestamp - ts
+        if time_diff.total_seconds() > 216000:
+            del_idx += 1
+        else:
+            break
+    
+    if del_idx > 0:
+        del messages_master[:2*del_idx]
+        del search_results_master[:del_idx]
+        del timestamps_master[:del_idx]
+
     contents = invoke_azure_ai_search(query, 10)
     output = invoke_llm(query, contents)
     return output
